@@ -19,8 +19,8 @@ const FormData: typeof import('form-data') = require('form-data');
 const execAsync = promisify(exec);
 
 let instance: Winboat | null = null;
-const logger = createLogger(path.join(WINBOAT_DIR, 'winboat.log'));
 const USAGE_PATH = path.join(WINBOAT_DIR, 'appUsage.json');
+export const logger = createLogger(path.join(WINBOAT_DIR, 'winboat.log'));
 
 const presetApps: WinApp[] = [
     {

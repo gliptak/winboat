@@ -1,17 +1,20 @@
 const fs: typeof import("fs") = require("fs");
 const path: typeof import("path") = require("path");
 import { WINBOAT_DIR } from "./constants";
+import { type PTSerializableDeviceInfo } from "./usbmanager";
 
 export type WinboatConfigObj = {
     scale: number;
     smartcardEnabled: boolean
     rdpMonitoringEnabled: boolean
+    passedThroughDevices: PTSerializableDeviceInfo[];
 };
 
 const defaultConfig: WinboatConfigObj = {
     scale: 100,
     smartcardEnabled: false,
     rdpMonitoringEnabled: false,
+    passedThroughDevices: [],
 };
 
 let instance: WinboatConfig | null = null;

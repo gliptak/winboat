@@ -126,6 +126,7 @@ import { onMounted, ref, useTemplateRef, watch } from 'vue';
 import { isInstalled } from './lib/install';
 import { Winboat } from './lib/winboat';
 import { openAnchorLink } from './utils/openLink';
+import { USBManager } from './lib/usbmanager';
 const { BrowserWindow }: typeof import('@electron/remote') = require('@electron/remote')
 const os: typeof import('os') = require('os')
 const path: typeof import('path') = require('path')
@@ -148,10 +149,13 @@ onMounted(async () => {
         $router.push('/setup');
     } else {
         winboat = new Winboat();
+        new USBManager();
         $router.push('/home');
     }
 
     // Watch for guest server updates and show dialog
+    // NOTE: It doesn't really matter if winboat is null here, we wouldn't be updating
+    // the guest server while installing Windows anyway
     watch(() => winboat?.isUpdatingGuestServer.value, (isUpdating) => {
         if (isUpdating === true) {
             updateDialog.value!.showModal();

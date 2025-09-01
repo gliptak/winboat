@@ -1,14 +1,14 @@
 <template>
-    <div class="flex flex-col gap-10" :class="{ 'hidden': !maxNumCores }">
+    <div class="flex overflow-x-hidden flex-col gap-10" :class="{ 'hidden': !maxNumCores }">
         <div>
             <x-label class="mb-4 text-neutral-300">Resources</x-label>
             <div class="flex flex-col gap-4">
                 <x-card
-                    class="flex items-center p-2 flex-row justify-between w-full py-3 my-0 bg-neutral-800/20 backdrop-brightness-150 backdrop-blur-xl">
+                    class="flex flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div>
-                        <div class="flex flex-row items-center gap-2 mb-2">
-                            <Icon class="text-violet-400 inline-flex size-8" icon="game-icons:ram"></Icon>
-                            <h1 class="text-lg my-0 font-semibold">
+                        <div class="flex flex-row gap-2 items-center mb-2">
+                            <Icon class="inline-flex text-violet-400 size-8" icon="game-icons:ram"></Icon>
+                            <h1 class="my-0 text-lg font-semibold">
                                 RAM Allocation
                             </h1>
                         </div>
@@ -16,7 +16,7 @@
                             How many gigabytes of RAM are allocated to the Windows virtual machine
                         </p>
                     </div>
-                    <div class="flex flex-row justify-center items-center gap-2">
+                    <div class="flex flex-row gap-2 justify-center items-center">
                         <x-input
                             class="max-w-16 text-right text-[1.1rem]"
                             min="4"
@@ -29,11 +29,11 @@
                     </div>
                 </x-card>
                 <x-card
-                    class="flex items-center p-2 flex-row justify-between w-full py-3 my-0 bg-neutral-800/20 backdrop-brightness-150 backdrop-blur-xl">
+                    class="flex flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div>
-                        <div class="flex flex-row items-center gap-2 mb-2">
-                            <Icon class="text-violet-400 inline-flex size-8" icon="solar:cpu-bold"></Icon>
-                            <h1 class="text-lg my-0 font-semibold">
+                        <div class="flex flex-row gap-2 items-center mb-2">
+                            <Icon class="inline-flex text-violet-400 size-8" icon="solar:cpu-bold"></Icon>
+                            <h1 class="my-0 text-lg font-semibold">
                                 CPU Cores
                             </h1>
                         </div>
@@ -41,7 +41,7 @@
                             How many CPU Cores are allocated to the Windows virtual machine
                         </p>
                     </div>
-                    <div class="flex flex-row justify-center items-center gap-2">
+                    <div class="flex flex-row gap-2 justify-center items-center">
                         <x-input
                             class="max-w-16 text-right text-[1.1rem]"
                             min="2"
@@ -51,6 +51,57 @@
                             required
                         ></x-input>
                         <p class="text-neutral-100">Cores</p>
+                    </div>
+                </x-card>
+                <x-card
+                    class="flex relative z-20 flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
+                    <div class="w-full">
+                        <div class="flex flex-row gap-2 items-center mb-2">
+                            <Icon class="inline-flex text-violet-400 size-8" icon="fluent:tv-usb-24-filled"></Icon>
+                            <h1 class="my-0 text-lg font-semibold">
+                                USB Passthrough
+                            </h1>
+                        </div>
+                        <x-label class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0" v-if="usbManager.ptDevices.value.length == 0">Press the button below to add USB devices to your passthrough list</x-label>
+                        <TransitionGroup name="devices" tag="x-box" class="flex-col gap-2 mt-4">
+                            <x-card 
+                                class="flex justify-between items-center px-2 py-0 m-0 bg-white/5"
+                                :class="{ 'opacity-75': !usbManager.isPTDeviceConnected(device) }"
+                                v-for="device, k of usbManager.ptDevices.value" 
+                                :key="`${device.vendorId}-${device.productId}`"
+                            >
+                                <div class="flex flex-row gap-2 items-center"> 
+                                    <Icon v-if="!usbManager.isPTDeviceConnected(device)" class="inline-flex text-red-500 size-7" icon="clarity:warning-solid">
+                                    </Icon>
+                                    <p class="text-base !m-0 text-gray-200">
+                                        {{ usbManager.stringifyPTSerializableDevice(device) }}
+                                    </p>
+                                </div>
+                                <x-button @click="removeDevice(device)" class="mt-1 !bg-gradient-to-tl from-red-500/20 to-transparent hover:from-red-500/30 transition !border-0">
+                                    <x-icon href="#remove"></x-icon>
+                                </x-button>
+                            </x-card>
+                        </TransitionGroup>
+                        <x-button 
+                            v-if="availableDevices.length > 0"
+                            class="mt-4 !bg-gradient-to-tl from-blue-400/20 shadow-md shadow-blue-950/20 to-transparent hover:from-blue-400/30 transition"
+                            @click="refreshAvailableDevices()"
+                        >
+                            <x-icon href="#add"></x-icon>
+                            <x-label>Add Device</x-label>
+                            <TransitionGroup ref="usbMenu" name="menu" tag="x-menu">
+                                <x-menuitem 
+                                    v-for="device, k of availableDevices as Device[]" 
+                                    :key="`${device.deviceDescriptor.idVendor}-${device.deviceDescriptor.idProduct}`"
+                                    @click="addDevice(device)"
+                                >
+                                    <x-label>{{ usbManager.stringifyDevice(device) }}</x-label>
+                                </x-menuitem>
+                                <x-menuitem v-if="availableDevices.length === 0" disabled>
+                                    <x-label>No available devices</x-label>
+                                </x-menuitem>
+                            </TransitionGroup>
+                        </x-button>
                     </div>
                 </x-card>
                 <div class="flex flex-col">
@@ -72,11 +123,11 @@
             <x-label class="mb-4 text-neutral-300">General</x-label>
             <div class="flex flex-col gap-4">
                 <x-card
-                    class="flex items-center p-2 flex-row justify-between w-full py-3 my-0 bg-neutral-800/20 backdrop-brightness-150 backdrop-blur-xl">
+                    class="flex flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div>
-                        <div class="flex flex-row items-center gap-2 mb-2">
-                            <Icon class="text-violet-400 inline-flex size-8" icon="uil:scaling-right"></Icon>
-                            <h1 class="text-lg my-0 font-semibold">
+                        <div class="flex flex-row gap-2 items-center mb-2">
+                            <Icon class="inline-flex text-violet-400 size-8" icon="uil:scaling-right"></Icon>
+                            <h1 class="my-0 text-lg font-semibold">
                                 Display Scaling
                             </h1>
                         </div>
@@ -84,7 +135,7 @@
                             Controls how large the display scaling is. This applies for both the desktop view and applications
                         </p>
                     </div>
-                    <div class="flex flex-row justify-center items-center gap-2">
+                    <div class="flex flex-row gap-2 justify-center items-center">
                         <x-select class="w-20 z-100" @change="(e: any) => wbConfig.config.scale = Number(e.detail.newValue)">
                             <x-menu>
                                 <x-menuitem value="100" :toggled="wbConfig.config.scale === 100">
@@ -103,11 +154,11 @@
                     </div>
                 </x-card>
                 <x-card
-                    class="flex items-center p-2 flex-row justify-between w-full py-3 my-0 bg-neutral-800/20 backdrop-brightness-150 backdrop-blur-xl">
+                    class="flex flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div>
-                        <div class="flex flex-row items-center gap-2 mb-2">
-                            <Icon class="text-violet-400 inline-flex size-8" icon="game-icons:swipe-card"></Icon>
-                            <h1 class="text-lg my-0 font-semibold">
+                        <div class="flex flex-row gap-2 items-center mb-2">
+                            <Icon class="inline-flex text-violet-400 size-8" icon="game-icons:swipe-card"></Icon>
+                            <h1 class="my-0 text-lg font-semibold">
                                 Smartcard Passthrough
                             </h1>
                         </div>
@@ -115,7 +166,7 @@
                             If enabled, your smartcard readers will be passed to Windows when you start an app
                         </p>
                     </div>
-                    <div class="flex flex-row justify-center items-center gap-2">
+                    <div class="flex flex-row gap-2 justify-center items-center">
                         <x-switch
                             :toggled="wbConfig.config.smartcardEnabled"
                             @toggle="(_: any) => wbConfig.config.smartcardEnabled = !wbConfig.config.smartcardEnabled"
@@ -124,11 +175,11 @@
                     </div>
                 </x-card>
                 <x-card
-                    class="flex items-center p-2 flex-row justify-between w-full py-3 my-0 bg-neutral-800/20 backdrop-brightness-150 backdrop-blur-xl">
+                    class="flex flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div>
-                        <div class="flex flex-row items-center gap-2 mb-2">
-                            <Icon class="text-violet-400 inline-flex size-8" icon="fluent:remote-16-filled"></Icon>
-                            <h1 class="text-lg my-0 font-semibold">
+                        <div class="flex flex-row gap-2 items-center mb-2">
+                            <Icon class="inline-flex text-violet-400 size-8" icon="fluent:remote-16-filled"></Icon>
+                            <h1 class="my-0 text-lg font-semibold">
                                 RDP Monitoring
                             </h1>
                         </div>
@@ -136,7 +187,7 @@
                             If enabled, a banner will appear when the RDP session is connected (may cause high CPU usage, disable if you notice performance issues)
                         </p>
                     </div>
-                    <div class="flex flex-row justify-center items-center gap-2">
+                    <div class="flex flex-row gap-2 justify-center items-center">
                         <x-switch
                             :toggled="wbConfig.config.rdpMonitoringEnabled"
                             @toggle="(_: any) => wbConfig.config.rdpMonitoringEnabled = !wbConfig.config.rdpMonitoringEnabled"
@@ -148,8 +199,8 @@
         </div>
         <div>
             <x-label class="mb-4 text-neutral-300">Danger Zone</x-label>
-            <x-card class="flex flex-col w-full py-3 my-0 bg-red-500/10 backdrop-brightness-150 backdrop-blur-xl mb-6">
-                <h1 class="my-0 font-normal text-lg text-red-300">
+            <x-card class="flex flex-col py-3 my-0 mb-6 w-full backdrop-blur-xl backdrop-brightness-150 bg-red-500/10">
+                <h1 class="my-0 text-lg font-normal text-red-300">
                     ⚠️ <span class="font-bold">WARNING:</span> All actions here are potentially destructive, proceed at your own caution!
                 </h1>
             </x-card>
@@ -180,9 +231,12 @@ import { type ComposeConfig } from '../../types';
 import { getSpecs } from '../lib/specs';
 import { Icon } from '@iconify/vue';
 import { WinboatConfig } from '../lib/config';
+import { USBManager, type PTSerializableDeviceInfo } from '../lib/usbmanager';
+import { type Device } from 'usb';
 const { app }: typeof import('@electron/remote') = require('@electron/remote');
 
 const winboat = new Winboat();
+const usbManager = new USBManager();
 
 // For Resources
 const compose = ref<ComposeConfig | null>(null);
@@ -215,6 +269,8 @@ async function assignValues() {
     const specs = await getSpecs();
     maxRamGB.value = specs.ramGB;
     maxNumCores.value = specs.cpuThreads;
+
+    refreshAvailableDevices();
 }
 
 async function applyChanges() {
@@ -265,7 +321,76 @@ async function resetWinboat() {
     app.exit();
 }
 
+// USB Passthrough functionality
+const LINUX_FOUNDATION_VID = "1d6b";
+
+const availableDevices = ref<Device[]>([]);
+// Reactivity utterly fails here, so we use this function to
+// refresh via the button
+function refreshAvailableDevices() {
+    availableDevices.value = usbManager.devices.value.filter(device => {
+        return !usbManager.isDeviceInPassthroughList(device) &&
+            !usbManager.stringifyDevice(device).includes(LINUX_FOUNDATION_VID);
+    });
+    console.info('[Available Devices] Debug', availableDevices.value);
+}
+
+
+function isDeviceConnected(ptDevice: PTSerializableDeviceInfo): boolean {
+    return usbManager.devices.value.some(device => 
+        device.deviceDescriptor.idVendor === ptDevice.vendorId && 
+        device.deviceDescriptor.idProduct === ptDevice.productId
+    );
+}
+
+function addDevice(device: Device): void {
+    try {
+        usbManager.addDeviceToPassthroughList(device);
+    } catch (error) {
+        console.error('Failed to add device to passthrough list:', error);
+    }
+}
+
+function removeDevice(ptDevice: PTSerializableDeviceInfo): void {
+    try {
+        usbManager.removeDeviceFromPassthroughList(ptDevice);
+    } catch (error) {
+        console.error('Failed to remove device from passthrough list:', error);
+    }
+}
+
 </script>
 
-<style>
+<style scoped>
+.devices-move, 
+.devices-enter-active,
+.devices-leave-active {
+  transition: all 0.5s ease;
+}
+
+.devices-enter-from,
+.devices-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
+}
+
+.devices-leave-active {
+  position: absolute;
+}
+
+.menu-move, 
+.menu-enter-active,
+.menu-leave-active {
+  transition: all 0.5s ease;
+}
+
+.menu-enter-from,
+.menu-leave-to {
+  opacity: 0;
+  transform: translateX(20px) scale(0.9);
+}
+
+.menu-leave-active {
+  position: absolute;
+}
 </style>
