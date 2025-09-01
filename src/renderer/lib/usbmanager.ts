@@ -48,7 +48,8 @@ export class USBManager {
         // if they are not in the database
         this.devices.value.forEach(d => this.stringifyDevice(d));
         this.ptDevices.value = this.#wbConfig.config.passedThroughDevices;
-        this.#setupUpdateListeners();
+        this.#setupDeviceUpdateListeners();
+        this.#setupGuestListener();
 
         return USBManager.instance;
     }
@@ -56,7 +57,7 @@ export class USBManager {
     /**
      * Sets up listeners for USB device attach and detach events
      */
-    #setupUpdateListeners() {
+    #setupDeviceUpdateListeners() {
         usb.on("attach", async (device: Device) => {
             this.devices.value = getDeviceList();
 
@@ -89,7 +90,7 @@ export class USBManager {
     /**
      * Sets up the listener responsible for passing through devices in bulk when the guest is online
      */
-    #setupGuestOnlineListener() {
+    #setupGuestListener() {
         watch(this.#winboat.isOnline, (isOnline: boolean) => {
             if (!isOnline) return;
 
