@@ -227,7 +227,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { Winboat } from '../lib/winboat';
-import { type ComposeConfig } from '../../types';
+import type { ComposeConfig, USBDevice } from '../../types';
 import { getSpecs } from '../lib/specs';
 import { Icon } from '@iconify/vue';
 import { WinboatConfig } from '../lib/config';
@@ -243,7 +243,7 @@ const compose = ref<ComposeConfig | null>(null);
 const numCores = ref(0);
 const origNumCores = ref(0);
 const maxNumCores = ref(0);
-const ramGB = ref(0);
+const ramGB = ref(0); 
 const origRamGB = ref(0);
 const maxRamGB = ref(0);
 const isApplyingChanges = ref(false);
@@ -255,7 +255,7 @@ const wbConfig = new WinboatConfig();
 
 onMounted(async () => {
     await assignValues();
-})
+});
 
 async function assignValues() {
     compose.value = winboat.parseCompose();
@@ -276,6 +276,7 @@ async function assignValues() {
 async function applyChanges() {
     compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
     compose.value!.services.windows.environment.CPU_CORES = `${numCores.value}`;
+    // compose.value!.services.windows.environment.ARGUMENTS = DefaultCompose.services.windows.environment.ARGUMENTS + serializeUSBDevices(selectedUsbDevices);
 
     isApplyingChanges.value = true;
     try {
@@ -333,14 +334,6 @@ function refreshAvailableDevices() {
             !usbManager.stringifyDevice(device).includes(LINUX_FOUNDATION_VID);
     });
     console.info('[Available Devices] Debug', availableDevices.value);
-}
-
-
-function isDeviceConnected(ptDevice: PTSerializableDeviceInfo): boolean {
-    return usbManager.devices.value.some(device => 
-        device.deviceDescriptor.idVendor === ptDevice.vendorId && 
-        device.deviceDescriptor.idProduct === ptDevice.productId
-    );
 }
 
 function addDevice(device: Device): void {

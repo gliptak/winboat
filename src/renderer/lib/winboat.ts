@@ -8,6 +8,8 @@ import PrettyYAML from "json-to-pretty-yaml";
 import { InternalApps } from "../data/internalapps";
 import { getFreeRDP } from "../utils/getFreeRDP";
 import { WinboatConfig } from "./config";
+import { QMPManager } from "./qmp";
+import { assert } from "@vueuse/core";
 const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
 const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
@@ -17,9 +19,8 @@ const remote: typeof import('@electron/remote') = require('@electron/remote');
 const FormData: typeof import('form-data') = require('form-data');
 
 const execAsync = promisify(exec);
-
-let instance: Winboat | null = null;
 const USAGE_PATH = path.join(WINBOAT_DIR, 'appUsage.json');
+const QMP_PORT = 7149;
 export const logger = createLogger(path.join(WINBOAT_DIR, 'winboat.log'));
 
 const presetApps: WinApp[] = [
@@ -117,6 +118,7 @@ class AppManager {
 }
 
 export class Winboat {
+    private static instance: Winboat;
     #healthInterval: NodeJS.Timeout | null = null;
     isOnline: Ref<boolean> = ref(false);
     isUpdatingGuestServer: Ref<boolean> = ref(false);
@@ -144,9 +146,12 @@ export class Winboat {
     })
     #wbConfig: WinboatConfig | null = null
     appMgr: AppManager | null = null
+    qmpMgr: QMPManager | null = null
 
     constructor() {
-        if (instance) return instance;
+        if (Winboat.instance) {
+            return Winboat.instance;
+        }
         
         // This is a special interval which will never be destroyed
         this.#containerInterval = setInterval(async () => {
@@ -156,6 +161,7 @@ export class Winboat {
                 logger.info(`Winboat Container state changed to ${_containerStatus}`);
 
                 if (_containerStatus === ContainerStatus.Running) {
+                    await this.#connectQMPManager();
                     this.createAPIInvervals();
                 } else {
                     this.destroyAPIInvervals();
@@ -167,9 +173,9 @@ export class Winboat {
 
         this.appMgr = new AppManager();
 
-        instance = this;
+        Winboat.instance = this;
 
-        return instance;
+        return Winboat.instance;
     }
 
     /**
@@ -259,6 +265,10 @@ export class Winboat {
             // Side-effect: Set rdpConnected to false
             this.rdpConnected.value = false;
         }
+
+        if (this.qmpMgr?.isAlive) {
+            this.qmpMgr.qmpSocket.destroy();
+        }
     }
 
     async getHealth() {
@@ -305,6 +315,28 @@ export class Winboat {
             username: compose.services.windows.environment.USERNAME,
             password: compose.services.windows.environment.PASSWORD
         }
+    }
+
+    async #connectQMPManager() {
+        if(await this.qmpMgr?.isAlive()) {
+            return;
+        }
+
+        try {
+            this.qmpMgr?.qmpSocket.destroy();
+            this.qmpMgr = await QMPManager.createConnection("127.0.0.1", QMP_PORT).catch(e => {logger.error(e); throw e});
+            const capabilities = await this.qmpMgr.executeCommand("qmp_capabilities");
+            assert("return" in capabilities);
+
+            const commands = await this.qmpMgr.executeCommand("query-commands");
+
+            // @ts-ignore property "result" already exists due to assert
+            assert(commands.return.every(x => "name" in x));
+        } catch(e) {
+            logger.error("There was an error connecting to QMP");
+            logger.error(e);
+        }
+
     }
 
     async startContainer() {
@@ -403,6 +435,7 @@ export class Winboat {
 
         // 5. Deploy the container with the new compose file
         await execAsync(`docker compose -f ${composeFilePath} up -d`);
+        await this.#connectQMPManager();
         logger.info("Replace compose config completed, successfully deployed new container");
 
         this.containerActionLoading.value = false;

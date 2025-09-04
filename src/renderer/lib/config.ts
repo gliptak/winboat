@@ -17,17 +17,16 @@ const defaultConfig: WinboatConfigObj = {
     passedThroughDevices: [],
 };
 
-let instance: WinboatConfig | null = null;
-
-export class WinboatConfig {
+export class WinboatConfig { 
+    private static instance: WinboatConfig;
     #configPath: string = path.join(WINBOAT_DIR, "winboat.config.json");
     #configData: WinboatConfigObj = { ...defaultConfig };
 
     constructor() {
-        if (instance) return instance;
+        if (WinboatConfig.instance) return WinboatConfig.instance;
         this.#configData = this.readConfig();
         console.log("Reading current config", this.#configData);
-        instance = this;
+        WinboatConfig.instance = this;
     }
 
     get config(): WinboatConfigObj {
@@ -51,6 +50,7 @@ export class WinboatConfig {
     }
 
     writeConfig(): void {
+        console.log("writing data: ", this.#configData);
         fs.writeFileSync(this.#configPath, JSON.stringify(this.#configData, null, 4), "utf-8");
     }
 

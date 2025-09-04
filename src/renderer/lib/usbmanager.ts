@@ -5,6 +5,8 @@ import { type Device } from "usb";
 import { type Ref, ref, watch } from "vue";
 import { Winboat, logger } from "./winboat";
 import { WinboatConfig } from "./config";
+import { QMPManager } from "./qmp";
+import { assert } from "@vueuse/core";
 
 const LINUX_DEVICE_DATABASE_PATH = "/usr/share/hwdata/usb.ids";
 
@@ -38,8 +40,8 @@ export class USBManager {
     #wbConfig: WinboatConfig = new WinboatConfig()
 
     constructor() {
-        if (!USBManager.instance) {
-            USBManager.instance = this;
+        if (USBManager.instance) {
+            return USBManager.instance;
         }
 
         this.#linuxDeviceDatabase = readLinuxDeviceDatabase(LINUX_DEVICE_DATABASE_PATH);
@@ -51,6 +53,8 @@ export class USBManager {
         this.#setupDeviceUpdateListeners();
         this.#setupGuestListener();
 
+        USBManager.instance = this;
+
         return USBManager.instance;
     }
 
@@ -60,15 +64,14 @@ export class USBManager {
     #setupDeviceUpdateListeners() {
         usb.on("attach", async (device: Device) => {
             this.devices.value = getDeviceList();
-
             logger.info(`USB device attached: ${this.stringifyDevice(device)}`);
             if (
                     this.#winboat.isOnline.value &&
                     this.isDeviceInPassthroughList(device) &&
-                    !QMPCheckIfDeviceExists(device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct)
+                    !await QMPCheckIfDeviceExists(this.#winboat.qmpMgr!, device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct)
             ) {
                 logger.info(`Device is in passthrough list, adding to VM: ${this.stringifyDevice(device)}`);   
-                QMPAddDevice(device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct);
+                await QMPAddDevice(this.#winboat.qmpMgr!, device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct);
             }
         });
 
@@ -79,10 +82,10 @@ export class USBManager {
             if (
                 this.#winboat.isOnline.value &&
                 this.isDeviceInPassthroughList(device) &&
-                QMPCheckIfDeviceExists(device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct)
+                await QMPCheckIfDeviceExists(this.#winboat.qmpMgr!, device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct)
             ) {
                 logger.info(`Device is in passthrough list, removing from VM: ${this.stringifyDevice(device)}`);
-                QMPRemoveDevice(device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct);
+                await QMPRemoveDevice(this.#winboat.qmpMgr!, device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct);
             }
         });
     }
@@ -91,15 +94,15 @@ export class USBManager {
      * Sets up the listener responsible for passing through devices in bulk when the guest is online
      */
     #setupGuestListener() {
-        watch(this.#winboat.isOnline, (isOnline: boolean) => {
+        watch(this.#winboat.isOnline, async (isOnline: boolean) => {
             if (!isOnline) return;
 
             logger.info("Guest is online, passing through devices");
             // Pass through any devices that are in the passthrough list & connected
             for (const ptDevice of this.#wbConfig.config.passedThroughDevices) {
-                if (this.isPTDeviceConnected(ptDevice) && !QMPCheckIfDeviceExists(ptDevice.vendorId, ptDevice.productId)) {
+                if (this.isPTDeviceConnected(ptDevice) && !(await QMPCheckIfDeviceExists(this.#winboat.qmpMgr!, ptDevice.vendorId, ptDevice.productId))) {
                     logger.info(`Pass-through device ${this.stringifyPTSerializableDevice(ptDevice)} is connected, adding to VM`);
-                    QMPAddDevice(ptDevice.vendorId, ptDevice.productId);
+                    await QMPAddDevice(this.#winboat.qmpMgr!, ptDevice.vendorId, ptDevice.productId);
                 }
             }
         });
@@ -191,7 +194,7 @@ export class USBManager {
      * Adds a USB device to the passthrough list
      * @param device The USB device to add
      */
-    addDeviceToPassthroughList(device: Device): void {
+    async addDeviceToPassthroughList(device: Device) {
         const ptDevice = this.#convertDeviceToPTSerializable(device);
 
         // Avoid duplicates
@@ -208,8 +211,8 @@ export class USBManager {
         this.ptDevices.value = this.#wbConfig.config.passedThroughDevices;
         console.info('[Add] Debug 2', this.ptDevices.value);
 
-        if (!QMPCheckIfDeviceExists(ptDevice.vendorId, ptDevice.productId)) {
-            QMPAddDevice(ptDevice.vendorId, ptDevice.productId);
+        if (this.#winboat.isOnline.value && !await QMPCheckIfDeviceExists(this.#winboat.qmpMgr!, ptDevice.vendorId, ptDevice.productId)) {
+            await QMPAddDevice(this.#winboat.qmpMgr!, ptDevice.vendorId, ptDevice.productId);
         }
 
         logger.info(`Added device "${ptDevice.manufacturer} | ${ptDevice.product}" to passthrough list`);
@@ -219,16 +222,16 @@ export class USBManager {
      * Removes a USB device from the passthrough list
      * @param ptDevice The device's PTSerializableDeviceInfo object to remove
      */
-    removeDeviceFromPassthroughList(ptDevice: PTSerializableDeviceInfo): void {
+    async removeDeviceFromPassthroughList(ptDevice: PTSerializableDeviceInfo) {
         console.info('[Remove] Debug', this.ptDevices.value);
         this.#wbConfig.config.passedThroughDevices = this.#wbConfig.config.passedThroughDevices.filter(
-            d => d.vendorId !== ptDevice.vendorId && d.productId !== ptDevice.productId
+            d => d.vendorId !== ptDevice.vendorId || d.productId !== ptDevice.productId
         );
         this.ptDevices.value = this.#wbConfig.config.passedThroughDevices;
         console.info('[Remove] Debug 2', this.ptDevices.value);
-        
-        if (QMPCheckIfDeviceExists(ptDevice.vendorId, ptDevice.productId)) {
-            QMPRemoveDevice(ptDevice.vendorId, ptDevice.productId);
+
+        if (this.#winboat.isOnline.value && await QMPCheckIfDeviceExists(this.#winboat.qmpMgr!, ptDevice.vendorId, ptDevice.productId)) {
+            await QMPRemoveDevice(this.#winboat.qmpMgr!, ptDevice.vendorId, ptDevice.productId);
         }
 
         logger.info(`Removed device "${ptDevice.manufacturer} | ${ptDevice.product}" from passthrough list`);
@@ -326,19 +329,50 @@ function getDeviceStringsFromLsusb(vidHex: string, pidHex: string): DeviceString
     }
 }
 
-function QMPCheckIfDeviceExists(vendorId: number, productId: number): boolean {
-    // stub
-    logger.info("QMPCheckIfDeviceExists", vendorId, productId);
+
+async function QMPCheckIfDeviceExists(qmpConn: QMPManager, vendorId: number, productId: number): Promise<boolean> {
+    let response = null;
+    try {
+        response = await qmpConn.executeCommand("human-monitor-command", {"command-line": "info qtree"})
+        assert("result" in response);
+        // @ts-ignore property "result" already exists due to assert
+        return response.return.includes(`usb-host, id "${vendorId}:${productId}"`);
+    } catch(e) {
+        logger.error(`There was an error checking whether USB device '${vendorId}:${productId}' exists`);
+        logger.error(e);
+        logger.error(`QMP response: ${response}`);
+    }
     return false;
 }
 
-
-function QMPAddDevice(vendorId: number, productId: number) {
-    // stub
+// TODO: handle hostaddr/hostbus
+async function QMPAddDevice(qmpConn: QMPManager, vendorId: number, productId: number) {
+    let response = null;
+    try {
+        response = await qmpConn.executeCommand("device_add", {
+            driver: "usb-host",
+            id: `${vendorId}:${productId}`, // TODO: get rid of this
+            vendorid: vendorId,
+            productid: productId,
+        });
+        assert("result" in response);
+    } catch(e) {
+        logger.error(`There was an error adding USB device '${vendorId}:${productId}'`);
+        logger.error(e);
+        logger.error(`QMP response: ${response}`);
+    }
     logger.info("QMPAddDevice", vendorId, productId);
 }
 
-function QMPRemoveDevice(vendorId: number, productId: number) {
-    // stub
+async function QMPRemoveDevice(qmpConn: QMPManager, vendorId: number, productId: number) {
+    let response = null;
+    try {
+        response = await qmpConn.executeCommand("device_del", { id: `${vendorId}:${productId}`});
+        assert("result" in response);
+    } catch(e) {
+        logger.error(`There was an error removing USB device '${vendorId}:${productId}'`);
+        logger.error(e);
+        logger.error(`QMP response: ${response}`);
+    }
     logger.info("QMPRemoveDevice", vendorId, productId);
 }
