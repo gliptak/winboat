@@ -161,8 +161,7 @@ export class Winboat {
                 logger.info(`Winboat Container state changed to ${_containerStatus}`);
 
                 if (_containerStatus === ContainerStatus.Running) {
-                    await this.#connectQMPManager();
-                    this.createAPIInvervals();
+                    await this.createAPIInvervals();
                 } else {
                     this.destroyAPIInvervals();
                 }
@@ -181,7 +180,7 @@ export class Winboat {
     /**
      * Creates the intervals which rely on the Winboat Guest API.
      */
-    createAPIInvervals() {
+    async createAPIInvervals() {
         logger.info("Creating Winboat API intervals...");
         const HEALTH_WAIT_MS = 1000;
         const METRICS_WAIT_MS = 1000;
@@ -239,6 +238,8 @@ export class Winboat {
                 logger.info(`RDP connection status changed to ${_rdpConnected ? 'connected' : 'disconnected'}`);
             }
         }, RDP_STATUS_WAIT_MS);
+
+        await this.#connectQMPManager();
     }
 
     /**

@@ -49,11 +49,11 @@ export const DefaultCompose: ComposeConfig = {
             "volumes": [
                 "data:/storage",
                 "${HOME}:/shared",
-                "./oem:/oem"
+                "/dev/bus/usb:/dev/bus/usb",
+                "./oem:/oem",
             ],
             "devices": [
                 "/dev/kvm",
-                "/dev/bus/usb"
             ]
         }
     }

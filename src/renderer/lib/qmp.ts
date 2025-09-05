@@ -68,7 +68,8 @@ type QMPArgumentProps = {
     "productid": number,
     "hostbus": number,
     "hostaddr": number,
-    "typename": string
+    "hostdevice": string
+    "typename": string,
 };
 
 type QMPArgument<T extends keyof QMPArgumentProps> = {
@@ -77,7 +78,7 @@ type QMPArgument<T extends keyof QMPArgumentProps> = {
 
 type QMPCommandExpectedArgument<T extends QMPCommand> = 
     T extends "human-monitor-command" ? QMPArgument<"command-line"> : 
-    T extends "device_add" ? QMPArgument<"driver" | "id" | "productid" | "vendorid" | "hostbus" | "hostaddr"> : 
+    T extends "device_add" ? QMPArgument<"driver" | "id" | "productid" | "vendorid" | "hostbus" | "hostaddr" | "hostdevice"> : 
     T extends "device_del" ? QMPArgument<"id"> : 
     T extends "device-list-properties" ? QMPArgument<"typename"> :
     never

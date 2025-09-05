@@ -71,7 +71,7 @@ export class USBManager {
                     !await QMPCheckIfDeviceExists(this.#winboat.qmpMgr!, device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct)
             ) {
                 logger.info(`Device is in passthrough list, adding to VM: ${this.stringifyDevice(device)}`);   
-                await QMPAddDevice(this.#winboat.qmpMgr!, device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct);
+                await QMPAddDevice(this.#winboat.qmpMgr!, device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct, device.busNumber, device.deviceAddress);
             }
         });
 
@@ -329,12 +329,12 @@ function getDeviceStringsFromLsusb(vidHex: string, pidHex: string): DeviceString
     }
 }
 
-
 async function QMPCheckIfDeviceExists(qmpConn: QMPManager, vendorId: number, productId: number): Promise<boolean> {
     let response = null;
     try {
         response = await qmpConn.executeCommand("human-monitor-command", {"command-line": "info qtree"})
         assert("result" in response);
+
         // @ts-ignore property "result" already exists due to assert
         return response.return.includes(`usb-host, id "${vendorId}:${productId}"`);
     } catch(e) {
@@ -345,21 +345,30 @@ async function QMPCheckIfDeviceExists(qmpConn: QMPManager, vendorId: number, pro
     return false;
 }
 
-// TODO: handle hostaddr/hostbus
-async function QMPAddDevice(qmpConn: QMPManager, vendorId: number, productId: number) {
-    let response = null;
+// TODO: handle hostaddr/hostbus in case of duplicate VID/PID
+async function QMPAddDevice(qmpConn: QMPManager, vendorId: number, productId: number, hostbus?: number, hostaddr?: number) {
     try {
-        response = await qmpConn.executeCommand("device_add", {
-            driver: "usb-host",
-            id: `${vendorId}:${productId}`, // TODO: get rid of this
-            vendorid: vendorId,
-            productid: productId,
-        });
+        let response = null;
+        if (hostbus && hostaddr) {
+            response = await qmpConn.executeCommand("device_add", {
+                driver: "usb-host",
+                id: `${vendorId}:${productId}`, // TODO: get rid of this
+                hostdevice: `/dev/bus/usb/${String(hostbus).padStart(3, '0')}/${String(hostaddr).padStart(3, '0')}` 
+            });
+        }
+        else {
+            response = await qmpConn.executeCommand("device_add", {
+                driver: "usb-host",
+                id: `${vendorId}:${productId}`, // TODO: get rid of this
+                vendorid: vendorId,
+                productid: productId,
+            });
+        }
+        
         assert("result" in response);
     } catch(e) {
         logger.error(`There was an error adding USB device '${vendorId}:${productId}'`);
         logger.error(e);
-        logger.error(`QMP response: ${response}`);
     }
     logger.info("QMPAddDevice", vendorId, productId);
 }
