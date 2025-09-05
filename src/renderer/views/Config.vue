@@ -1,5 +1,5 @@
 <template>
-    <div class="flex overflow-x-hidden flex-col gap-10" :class="{ 'hidden': !maxNumCores }">
+    <div class="flex flex-col gap-10 overflow-x-hidden" :class="{ 'hidden': !maxNumCores }">
         <div>
             <x-label class="mb-4 text-neutral-300">Resources</x-label>
             <div class="flex flex-col gap-4">
@@ -53,8 +53,46 @@
                         <p class="text-neutral-100">Cores</p>
                     </div>
                 </x-card>
-                <x-card
-                    class="flex relative z-20 flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
+                <x-card class="flex relative z-20 flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
+                    <div>
+                        <div class="flex flex-row items-center gap-2 mb-2">
+                            <Icon class="text-violet-400 inline-flex size-8" icon="fluent:folder-link-32-filled"></Icon>
+                            <h1 class="text-lg my-0 font-semibold">
+                                Shared Home Folder
+                            </h1>
+                        </div>
+                        <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
+                            If enabled, you will be able to access your Linux home folder within Windows under 
+                            <span class="font-mono bg-neutral-700 rounded-md px-1 py-0.5">Network\host.lan</span>
+                        </p>
+                    </div>
+                    <div class="flex flex-row justify-center items-center gap-2">
+                        <x-switch
+                            :toggled="shareHomeFolder"
+                            @toggle="(_: any) => shareHomeFolder = !shareHomeFolder"
+                            size="large"
+                        ></x-switch>
+                    </div>
+                </x-card>
+                <div class="flex flex-col">
+                    <p class="my-0 text-red-500" v-for="error, k of errors" :key="k">
+                        ❗ {{ error }}
+                    </p>
+                </div>
+                <x-button
+                    :disabled="saveButtonDisabled"
+                    @click="applyChanges()"
+                    class="w-24"
+                >
+                    <span v-if="!isApplyingChanges">Save</span>
+                    <x-throbber v-else class="w-10"></x-throbber>
+                </x-button>
+            </div>
+        </div>
+        <div>
+            <x-label class="mb-4 text-neutral-300">Devices</x-label>
+            <div class="flex flex-col gap-4">
+                <x-card class="flex relative z-20 flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div class="w-full">
                         <div class="flex flex-row gap-2 items-center mb-2">
                             <Icon class="inline-flex text-violet-400 size-8" icon="fluent:tv-usb-24-filled"></Icon>
@@ -104,19 +142,6 @@
                         </x-button>
                     </div>
                 </x-card>
-                <div class="flex flex-col">
-                    <p class="my-0 text-red-500" v-for="error, k of errors" :key="k">
-                        ❗ {{ error }}
-                    </p>
-                </div>
-                <x-button
-                    :disabled="errors.length || (origNumCores === numCores && origRamGB === ramGB) || isApplyingChanges"
-                    @click="applyChanges()"
-                    class="w-24"
-                >
-                    <span v-if="!isApplyingChanges">Save</span>
-                    <x-throbber v-else class="w-10"></x-throbber>
-                </x-button>
             </div>
         </div>
         <div>
@@ -238,6 +263,9 @@ const { app }: typeof import('@electron/remote') = require('@electron/remote');
 const winboat = new Winboat();
 const usbManager = new USBManager();
 
+// Constants
+const HOMEFOLDER_SHARE_STR = "${HOME}:/shared";
+
 // For Resources
 const compose = ref<ComposeConfig | null>(null);
 const numCores = ref(0);
@@ -246,6 +274,8 @@ const maxNumCores = ref(0);
 const ramGB = ref(0); 
 const origRamGB = ref(0);
 const maxRamGB = ref(0);
+const origShareHomeFolder = ref(false);
+const shareHomeFolder = ref(false);
 const isApplyingChanges = ref(false);
 const resetQuestionCounter = ref(0);
 const isResettingWinboat = ref(false);
@@ -266,6 +296,9 @@ async function assignValues() {
     ramGB.value = Number(compose.value.services.windows.environment.RAM_SIZE.split("G")[0]);
     origRamGB.value = ramGB.value;
 
+    shareHomeFolder.value = compose.value.services.windows.volumes.includes(HOMEFOLDER_SHARE_STR);
+    origShareHomeFolder.value = shareHomeFolder.value;
+
     const specs = await getSpecs();
     maxRamGB.value = specs.ramGB;
     maxNumCores.value = specs.cpuThreads;
@@ -277,6 +310,14 @@ async function applyChanges() {
     compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
     compose.value!.services.windows.environment.CPU_CORES = `${numCores.value}`;
     // compose.value!.services.windows.environment.ARGUMENTS = DefaultCompose.services.windows.environment.ARGUMENTS + serializeUSBDevices(selectedUsbDevices);
+
+    const composeHasHomefolderShare = compose.value!.services.windows.volumes.includes(HOMEFOLDER_SHARE_STR);
+
+    if (shareHomeFolder.value && !composeHasHomefolderShare) {
+        compose.value!.services.windows.volumes.push(HOMEFOLDER_SHARE_STR);
+    } else if (!shareHomeFolder.value && composeHasHomefolderShare) {
+        compose.value!.services.windows.volumes = compose.value!.services.windows.volumes.filter(v => v !== HOMEFOLDER_SHARE_STR);
+    }
 
     isApplyingChanges.value = true;
     try {
@@ -310,6 +351,12 @@ const errors = computed(() => {
     }
 
     return errCollection;
+})
+
+const saveButtonDisabled = computed(() => {
+    const hasResourceChanges = origNumCores.value !== numCores.value || origRamGB.value !== ramGB.value || shareHomeFolder.value !== origShareHomeFolder.value;
+    const shouldBeDisabled = errors.value.length || !hasResourceChanges || isApplyingChanges.value;
+    return shouldBeDisabled;
 })
 
 async function resetWinboat() {

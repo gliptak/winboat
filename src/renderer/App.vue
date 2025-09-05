@@ -12,15 +12,46 @@
         <!-- Updater -->
         <dialog ref="updateDialog">
             <Icon class="text-indigo-400 size-12" icon="mdi:cloud-upload"></Icon>
-            <h3 class="mt-2" v-if="winboat?.isUpdatingGuestServer.value">Updating Guest Server</h3>
-            <h3 class="mt-2" v-else>Guest Server update successful!</h3>
-            <p v-if="winboat?.isUpdatingGuestServer.value" class="max-w-[40vw]">
-                The guest is currently running an outdated version of the WinBoat Guest Server. Please wait while we update it to the current version.
-            </p>
-            <p v-else class="max-w-[40vw]">
-                The WinBoat Guest Server has been updated successfully! You can now close this dialog and continue using the application.
-            </p>
-            <footer>
+            <template v-if="manualUpdateRequired">
+                <h3 class="mt-2">Manual Guest Server Update Required</h3>
+                <div class="max-w-[60vw]">
+                    <strong>WinBoat has encountered an issue while trying to update the Guest Server automatically. Please follow the steps below to manually update it:</strong>
+                    <ol class="mt-2 list-decimal list-inside">
+                        <li>
+                            Use VNC over at 
+                            <a @click="openAnchorLink" href="http://127.0.0.1:8006/" target="_blank" rel="noopener noreferrer">http://127.0.0.1:8006/</a>
+                            to access Windows
+                        </li>
+                        <li>Press Win + R or search for <code>Run</code>, type in <code>services.msc</code></li>
+                        <li>Stop the <code>WinBoatGuestServer</code> service by right clicking and pressing "Stop"</li>
+                        <li>
+                            Download the new Guest Server from
+                            <a @click="openAnchorLink" href="https://github.com/TibixDev/winboat/releases" target="_blank" rel="noopener noreferrer">https://github.com/TibixDev/winboat/releases</a>,
+                            you should pick version <strong>{{ appVer }}</strong>
+                        </li>
+                        <li>Navigate to <code>C:\Program Files\WinBoat</code> and delete the contents</li>
+                        <li>Extract the freshly downloaded zip into the same folder</li>
+                        <li>Start the <code>WinBoatGuestServer</code> service by right clicking and pressing "Start"</li>
+                        <li>If you were using VNC, log out of Windows and close it</li>
+                        <li>Restart WinBoat</li>
+                    </ol>
+                    <p>
+                        We're sorry for the inconvenience. 😟
+                    </p>
+                </div>
+            </template>
+
+            <template v-else>
+                <h3 class="mt-2" v-if="winboat?.isUpdatingGuestServer.value">Updating Guest Server</h3>
+                <h3 class="mt-2" v-else>Guest Server update successful!</h3>
+                <p v-if="winboat?.isUpdatingGuestServer.value" class="max-w-[40vw]">
+                    The guest is currently running an outdated version of the WinBoat Guest Server. Please wait while we update it to the current version.
+                </p>
+                <p v-else class="max-w-[40vw]">
+                    The WinBoat Guest Server has been updated successfully! You can now close this dialog and continue using the application.
+                </p>
+            </template>
+            <footer v-if="!manualUpdateRequired">
                 <x-progressbar v-if="winboat?.isUpdatingGuestServer.value" class="my-4"></x-progressbar>
                 <x-button v-else id="close-button" @click="updateDialog!.close()" toggled>
                     <x-label>Close</x-label>
@@ -57,7 +88,7 @@
                     </x-navitem>
                 </RouterLink>
                 <div class="flex flex-col justify-end items-center p-4 h-full">
-                    <p class="text-xs text-neutral-500">WinBoat Pre-Release Alpha {{ appVer }}</p>
+                    <p class="text-xs text-neutral-500">WinBoat Beta v{{ appVer }} {{ isDev ? 'Dev' : 'Prod' }}</p>
                 </div>
             </x-nav>
             <div class="px-5 flex-grow max-h-[calc(100vh-2rem)] overflow-y-auto py-4">
@@ -101,6 +132,7 @@ const remote: typeof import('@electron/remote') = require('@electron/remote');
 const $router = useRouter();
 const updateDialog = useTemplateRef('updateDialog');
 const appVer = import.meta.env.VITE_APP_VERSION;
+const isDev = import.meta.env.DEV;
 let winboat: Winboat | null = null;
 
 onMounted(async () => {
