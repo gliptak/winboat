@@ -121,19 +121,24 @@
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { routes } from './router';
 import { Icon } from '@iconify/vue';
-import { onMounted, useTemplateRef, watch } from 'vue';
+import { onMounted, ref, useTemplateRef, watch } from 'vue';
 import { isInstalled } from './lib/install';
 import { Winboat } from './lib/winboat';
+import { openAnchorLink } from './utils/openLink';
 const { BrowserWindow }: typeof import('@electron/remote') = require('@electron/remote')
 const os: typeof import('os') = require('os')
 const path: typeof import('path') = require('path')
 const remote: typeof import('@electron/remote') = require('@electron/remote');
 
 const $router = useRouter();
-const updateDialog = useTemplateRef('updateDialog');
 const appVer = import.meta.env.VITE_APP_VERSION;
 const isDev = import.meta.env.DEV;
 let winboat: Winboat | null = null;
+
+let updateTimeout: NodeJS.Timeout | null = null;
+const manualUpdateRequired = ref(false);
+const MANUAL_UPDATE_TIMEOUT = 60000; // 60 seconds
+const updateDialog = useTemplateRef('updateDialog');
 
 onMounted(async () => {
     console.log("WinBoat app path:", path.join(remote.app.getAppPath(), "..", ".."));
@@ -147,10 +152,22 @@ onMounted(async () => {
     }
 
     // Watch for guest server updates and show dialog
-    watch(() => winboat?.isUpdatingGuestServer.value, (newVal) => {
-        if (newVal) {
+    watch(() => winboat?.isUpdatingGuestServer.value, (isUpdating) => {
+        if (isUpdating === true) {
             updateDialog.value!.showModal();
-        } 
+            
+            // Prepare the timeout to show manual update required after 45 seconds
+            updateTimeout = setTimeout(() => {
+                manualUpdateRequired.value = true;
+            }, MANUAL_UPDATE_TIMEOUT);
+        } else {
+            // Clear the timeout if the update finished before the timeout
+            if (updateTimeout) {
+                clearTimeout(updateTimeout);
+                updateTimeout = null;
+            }
+            manualUpdateRequired.value = false;
+        }
     })
 })
 

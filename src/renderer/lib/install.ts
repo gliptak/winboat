@@ -32,7 +32,8 @@ export const DefaultCompose: ComposeConfig = {
                 "PASSWORD": "MyWindowsPassword",
                 "HOME": "${HOME}",
                 "LANGUAGE": "English",
-                "ARGUMENTS": "-cpu host,arch_capabilities=off \n-qmp tcp:localhost:7149,server --monitor stdio\n"
+                "HOST_PORTS": "7149",
+                "ARGUMENTS": "-cpu host,arch_capabilities=off \n-qmp tcp:0.0.0.0:7149,server,wait=off\n"
             },
             "cap_add": [
                 "NET_ADMIN"
@@ -41,6 +42,7 @@ export const DefaultCompose: ComposeConfig = {
             "ports": [
                 "8006:8006", // VNC Web Interface
                 "7148:7148", // Winboat Guest Server API
+                "7149:7149", // QEMU QMP Port
                 "3389:3389/tcp", // RDP
                 "3389:3389/udp" // RDP
             ],
@@ -49,7 +51,7 @@ export const DefaultCompose: ComposeConfig = {
             "volumes": [
                 "data:/storage",
                 "${HOME}:/shared",
-                "/dev/bus/usb:/dev/bus/usb",
+                "/dev/bus/usb:/dev/bus/usb", // QEMU Synamic USB Passthrough
                 "./oem:/oem",
             ],
             "devices": [

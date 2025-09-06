@@ -98,6 +98,7 @@ export type QMPResponse<T extends QMPCommand> = QMPReturn<
 >;
 
 export class QMPManager {
+    private static IS_ALIVE_TIMEOUT = 2000;
     qmpSocket: Socket;
 
     /**
@@ -179,18 +180,30 @@ export class QMPManager {
      * 
      */
     async isAlive(): Promise<boolean> {
-        try {
+        return new Promise(async (resolve, _) => {
             if (this.qmpSocket.closed || this.qmpSocket.destroyed) { 
-                return false;
+                return resolve(false);
             }
 
-            const response = await this.executeCommand("query-status");
-            assert("return" in response);
-            return true;
-        } catch(e) {
-            logger.error("There was an error querying status of QMP connection");
-            logger.error(e);
-            return false;
-        }
+            const tm = setTimeout(_ => {
+                logger.warn("Querying status of QMP connection timed out.");
+                resolve(false);
+            }, QMPManager.IS_ALIVE_TIMEOUT);
+
+            this.executeCommand("query-status").then((response) => {
+                assert("return" in response);
+                clearTimeout(tm);
+                resolve(true);
+            }).catch(e => {
+                logger.error(`There was an error querying status of QMP connection`);
+                logger.error(e);
+            }).finally(() => {
+                clearTimeout(tm);
+                resolve(false);
+            });
+        })
+    }
+
+    private static handleError(e: unknown, msg?: string) {
     }
 }

@@ -80,11 +80,11 @@
                     </p>
                 </div>
                 <x-button
-                    :disabled="saveButtonDisabled"
+                    :disabled="saveButtonDisabled || isUpdatingUSBPrerequisites"
                     @click="applyChanges()"
                     class="w-24"
                 >
-                    <span v-if="!isApplyingChanges">Save</span>
+                    <span v-if="!isApplyingChanges || isUpdatingUSBPrerequisites">Save</span>
                     <x-throbber v-else class="w-10"></x-throbber>
                 </x-button>
             </div>
@@ -100,46 +100,80 @@
                                 USB Passthrough
                             </h1>
                         </div>
-                        <x-label class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0" v-if="usbManager.ptDevices.value.length == 0">Press the button below to add USB devices to your passthrough list</x-label>
-                        <TransitionGroup name="devices" tag="x-box" class="flex-col gap-2 mt-4">
-                            <x-card 
-                                class="flex justify-between items-center px-2 py-0 m-0 bg-white/5"
-                                :class="{ 'opacity-75': !usbManager.isPTDeviceConnected(device) }"
-                                v-for="device, k of usbManager.ptDevices.value" 
-                                :key="`${device.vendorId}-${device.productId}`"
-                            >
-                                <div class="flex flex-row gap-2 items-center"> 
-                                    <Icon v-if="!usbManager.isPTDeviceConnected(device)" class="inline-flex text-red-500 size-7" icon="clarity:warning-solid">
-                                    </Icon>
-                                    <p class="text-base !m-0 text-gray-200">
-                                        {{ usbManager.stringifyPTSerializableDevice(device) }}
-                                    </p>
-                                </div>
-                                <x-button @click="removeDevice(device)" class="mt-1 !bg-gradient-to-tl from-red-500/20 to-transparent hover:from-red-500/30 transition !border-0">
-                                    <x-icon href="#remove"></x-icon>
-                                </x-button>
-                            </x-card>
-                        </TransitionGroup>
-                        <x-button 
-                            v-if="availableDevices.length > 0"
-                            class="mt-4 !bg-gradient-to-tl from-blue-400/20 shadow-md shadow-blue-950/20 to-transparent hover:from-blue-400/30 transition"
-                            @click="refreshAvailableDevices()"
-                        >
-                            <x-icon href="#add"></x-icon>
-                            <x-label>Add Device</x-label>
-                            <TransitionGroup ref="usbMenu" name="menu" tag="x-menu">
-                                <x-menuitem 
-                                    v-for="device, k of availableDevices as Device[]" 
-                                    :key="`${device.deviceDescriptor.idVendor}-${device.deviceDescriptor.idProduct}`"
-                                    @click="addDevice(device)"
+                        <TransitionGroup name="usb-transition" tag="div" class="">
+                            <template v-if="usbPassthroughDisabled || isUpdatingUSBPrerequisites">
+                                <x-card 
+                                    class="flex items-center py-2 w-full my-2 backdrop-blur-xl gap-4 backdrop-brightness-150 bg-yellow-200/10"
                                 >
-                                    <x-label>{{ usbManager.stringifyDevice(device) }}</x-label>
-                                </x-menuitem>
-                                <x-menuitem v-if="availableDevices.length === 0" disabled>
-                                    <x-label>No available devices</x-label>
-                                </x-menuitem>
-                            </TransitionGroup>
-                        </x-button>
+                                    <Icon class="inline-flex text-yellow-500 size-8" icon="clarity:warning-solid"></Icon>
+                                    <h1 class="my-0 text-base font-normal text-yellow-200">
+                                        We need to update your Docker Compose in order to use this feature!
+                                    </h1>
+
+                                    <x-button 
+                                        :disabled="isUpdatingUSBPrerequisites"
+                                        class="mt-1 !bg-gradient-to-tl from-yellow-200/20 to-transparent ml-auto hover:from-yellow-300/30 transition !border-0"
+                                        @click="addRequiredComposeFieldsUSB"
+                                    >
+                                        <x-label
+                                            class="ext-lg font-normal text-yellow-200"
+                                            v-if="!isUpdatingUSBPrerequisites"
+                                        >
+                                            Update
+                                        </x-label>
+
+                                        <x-throbber v-else class="w-8 text-yellow-300"></x-throbber>
+                                    </x-button>
+                                </x-card>
+                            </template>
+                            <template v-else>
+                                <x-label 
+                                    class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0" 
+                                    v-if="usbManager.ptDevices.value.length == 0"
+                                >
+                                    Press the button below to add USB devices to your passthrough list
+                                </x-label>
+                                <TransitionGroup name="devices" tag="x-box" class="flex-col gap-2 mt-4">
+                                    <x-card 
+                                        class="flex justify-between items-center px-2 py-0 m-0 bg-white/5"
+                                        :class="{ 'opacity-75': !usbManager.isPTDeviceConnected(device) }"
+                                        v-for="device, k of usbManager.ptDevices.value" 
+                                        :key="`${device.vendorId}-${device.productId}`"
+                                    >
+                                        <div class="flex flex-row gap-2 items-center"> 
+                                            <Icon v-if="!usbManager.isPTDeviceConnected(device)" class="inline-flex text-red-500 size-7" icon="clarity:warning-solid">
+                                            </Icon>
+                                            <p class="text-base !m-0 text-gray-200">
+                                                {{ usbManager.stringifyPTSerializableDevice(device) }}
+                                            </p>
+                                        </div>
+                                        <x-button @click="removeDevice(device)" class="mt-1 !bg-gradient-to-tl from-red-500/20 to-transparent hover:from-red-500/30 transition !border-0">
+                                            <x-icon href="#remove"></x-icon>
+                                        </x-button>
+                                    </x-card>
+                                </TransitionGroup>
+                                <x-button 
+                                    v-if="availableDevices.length > 0"
+                                    class="mt-4 !bg-gradient-to-tl from-blue-400/20 shadow-md shadow-blue-950/20 to-transparent hover:from-blue-400/30 transition"
+                                    @click="refreshAvailableDevices()"
+                                >
+                                    <x-icon href="#add"></x-icon>
+                                    <x-label>Add Device</x-label>
+                                    <TransitionGroup ref="usbMenu" name="menu" tag="x-menu">
+                                        <x-menuitem 
+                                            v-for="device, k of availableDevices as Device[]" 
+                                            :key="`${device.deviceDescriptor.idVendor}-${device.deviceDescriptor.idProduct}`"
+                                            @click="addDevice(device)"
+                                        >
+                                            <x-label>{{ usbManager.stringifyDevice(device) }}</x-label>
+                                        </x-menuitem>
+                                        <x-menuitem v-if="availableDevices.length === 0" disabled>
+                                            <x-label>No available devices</x-label>
+                                        </x-menuitem>
+                                    </TransitionGroup>
+                                </x-button>
+                            </template>
+                        </TransitionGroup>
                     </div>
                 </x-card>
             </div>
@@ -229,7 +263,7 @@
                     ⚠️ <span class="font-bold">WARNING:</span> All actions here are potentially destructive, proceed at your own caution!
                 </h1>
             </x-card>
-            <div >
+            <div>
 
             </div>
             <x-button
@@ -265,6 +299,9 @@ const usbManager = new USBManager();
 
 // Constants
 const HOMEFOLDER_SHARE_STR = "${HOME}:/shared";
+const USB_BUS_PATH = "/dev/bus/usb:/dev/bus/usb";
+const QMP_ARGUMENT = "-qmp tcp:0.0.0.0:7149,server,wait=off";
+const QMP_PORT = "7149";
 
 // For Resources
 const compose = ref<ComposeConfig | null>(null);
@@ -279,6 +316,7 @@ const shareHomeFolder = ref(false);
 const isApplyingChanges = ref(false);
 const resetQuestionCounter = ref(0);
 const isResettingWinboat = ref(false);
+const isUpdatingUSBPrerequisites = ref(false);
 
 // For General
 const wbConfig = new WinboatConfig();
@@ -306,6 +344,19 @@ async function assignValues() {
     refreshAvailableDevices();
 }
 
+async function saveDockerCompose() {
+    isApplyingChanges.value = true;
+    try {
+        await winboat.replaceCompose(compose.value!);
+        await assignValues();
+    } catch(e) {
+        console.error("Failed to apply changes");
+        console.error(e);
+    } finally {
+        isApplyingChanges.value = false;
+    }
+}
+
 async function applyChanges() {
     compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
     compose.value!.services.windows.environment.CPU_CORES = `${numCores.value}`;
@@ -319,16 +370,41 @@ async function applyChanges() {
         compose.value!.services.windows.volumes = compose.value!.services.windows.volumes.filter(v => v !== HOMEFOLDER_SHARE_STR);
     }
 
-    isApplyingChanges.value = true;
-    try {
-        await winboat.replaceCompose(compose.value!);
-        await assignValues();
-    } catch(e) {
-        console.error("Failed to apply changes");
-        console.error(e);
-    } finally {
-        isApplyingChanges.value = false;
+    await saveDockerCompose();
+}
+
+async function addRequiredComposeFieldsUSB() {
+    if (!usbPassthroughDisabled.value) {
+        return;
     }
+    
+    isUpdatingUSBPrerequisites.value = true;
+
+    if(!hasUsbVolume(compose)) {
+        compose.value!.services.windows.volumes.push(USB_BUS_PATH);
+    }
+    if(!hasQmpPort(compose)) {
+        compose.value!.services.windows.ports.push(`${QMP_PORT}:${QMP_PORT}`);
+    }
+
+    if(!compose.value!.services.windows.environment.ARGUMENTS) {
+        compose.value!.services.windows.environment.ARGUMENTS = "";
+    }
+    if(!hasQmpArgument(compose)) {
+        compose.value!.services.windows.environment.ARGUMENTS += `\n${QMP_ARGUMENT}`;
+    }
+
+    if(!compose.value!.services.windows.environment.HOST_PORTS) {
+        compose.value!.services.windows.environment.HOST_PORTS = "";
+    }
+    if(!hasHostPort(compose)) {
+        const delimeter = compose.value!.services.windows.environment.HOST_PORTS.length == 0 ? '' : ',';
+        compose.value!.services.windows.environment.HOST_PORTS += delimeter + QMP_PORT;
+    }
+    
+    await saveDockerCompose();
+
+    isUpdatingUSBPrerequisites.value = false;
 }
 
 const errors = computed(() => {
@@ -351,6 +427,15 @@ const errors = computed(() => {
     }
 
     return errCollection;
+})
+
+const hasUsbVolume = (_compose: typeof compose) => _compose.value?.services.windows.volumes?.includes(USB_BUS_PATH);
+const hasQmpArgument = (_compose: typeof compose) => _compose.value?.services.windows.environment.ARGUMENTS?.includes(QMP_ARGUMENT);
+const hasQmpPort = (_compose: typeof compose) => _compose.value?.services.windows.ports?.includes(`${QMP_PORT}:${QMP_PORT}`)
+const hasHostPort = (_compose: typeof compose) => _compose.value?.services.windows.environment.HOST_PORTS?.includes(QMP_PORT);
+
+const usbPassthroughDisabled = computed(() => {
+    return !hasUsbVolume(compose) || !hasQmpArgument(compose) || !hasQmpPort(compose) || !hasHostPort(compose);
 })
 
 const saveButtonDisabled = computed(() => {
@@ -431,6 +516,22 @@ function removeDevice(ptDevice: PTSerializableDeviceInfo): void {
 }
 
 .menu-leave-active {
+  position: absolute;
+}
+
+.usb-transition-move, 
+.usb-transition-enter-active,
+.usb-transition-leave-active {
+  transition: all 0.5s ease;
+}
+
+.usb-transition-enter-from,
+.usb-transition-leave-to {
+  opacity: 0;
+  transform: translateX(20px) scale(0.9);
+}
+
+.usb-transition-leave-active {
   position: absolute;
 }
 </style>

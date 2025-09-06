@@ -51,6 +51,7 @@ export type ComposeConfig = {
                 HOME: string;
                 LANGUAGE: string;
                 ARGUMENTS: string;
+                HOST_PORTS: string;
                 [key: string]: string; // Allow additional env vars
             };
             privileged: boolean;

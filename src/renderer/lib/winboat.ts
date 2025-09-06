@@ -154,14 +154,18 @@ class AppManager {
 
 export class Winboat {
     private static instance: Winboat;
+    // Update Intervals
     #healthInterval: NodeJS.Timeout | null = null;
-    isOnline: Ref<boolean> = ref(false);
-    isUpdatingGuestServer: Ref<boolean> = ref(false);
     #containerInterval: NodeJS.Timeout | null = null;
-    containerStatus: Ref<ContainerStatusValue> = ref(ContainerStatus.Exited)
-    containerActionLoading: Ref<boolean> = ref(false)
     #metricsInverval: NodeJS.Timeout | null = null;
     #rdpConnectionStatusInterval: NodeJS.Timeout | null = null;
+    #qmpInterval: NodeJS.Timeout | null = null;
+
+    // Variables
+    isOnline: Ref<boolean> = ref(false);
+    isUpdatingGuestServer: Ref<boolean> = ref(false);
+    containerStatus: Ref<ContainerStatusValue> = ref(ContainerStatus.Exited)
+    containerActionLoading: Ref<boolean> = ref(false)
     rdpConnected: Ref<boolean> = ref(false);
     metrics: Ref<Metrics> = ref<Metrics>({
         cpu: {
@@ -198,7 +202,7 @@ export class Winboat {
                 if (_containerStatus === ContainerStatus.Running) {
                     await this.createAPIInvervals();
                 } else {
-                    this.destroyAPIInvervals();
+                    await this.destroyAPIInvervals();
                 }
             }
         }, 1000);
@@ -220,7 +224,9 @@ export class Winboat {
         const HEALTH_WAIT_MS = 1000;
         const METRICS_WAIT_MS = 1000;
         const RDP_STATUS_WAIT_MS = 1000;
+        const QMP_WAIT_MS = 2000;
 
+        // *** Health Interval ***
         // Make sure we don't have any existing intervals
         if (this.#healthInterval) {
             clearInterval(this.#healthInterval);
@@ -239,6 +245,7 @@ export class Winboat {
             }
         }, HEALTH_WAIT_MS);
 
+        // *** Metrics Interval ***
         // Make sure we don't have any existing intervals
         if (this.#metricsInverval) {
             clearInterval(this.#metricsInverval);
@@ -250,6 +257,7 @@ export class Winboat {
             this.metrics.value = await this.getMetrics();
         }, METRICS_WAIT_MS);
 
+        // *** RDP Connection Status Interval ***
         // Make sure we don't have any existing intervals
         if (this.#rdpConnectionStatusInterval) {
             clearInterval(this.#rdpConnectionStatusInterval);
@@ -274,14 +282,30 @@ export class Winboat {
             }
         }, RDP_STATUS_WAIT_MS);
 
-        await this.#connectQMPManager();
+        // *** QMP Interval ***
+        // Make sure we don't have any existing intervals
+        if (this.#qmpInterval) {
+            clearInterval(this.#qmpInterval);
+            this.#qmpInterval = null;
+        }
+
+        this.#qmpInterval = setInterval(async () => {
+            // If QMP already exists and healthy, we're good
+            if (this.qmpMgr && await this.qmpMgr.isAlive()) return;
+
+            // Otherwise, connect to it since the container is alive but
+            // QMP either doesn't exist or is disconnected
+            await this.#connectQMPManager();
+            logger.info("[QMPInterval] Created new QMP Manager");
+            
+        }, QMP_WAIT_MS);
     }
 
     /**
      * Destroys the intervals which rely on the Winboat Guest API.
      * This is called when the container is in any state other than Running.
      */
-    destroyAPIInvervals() {
+    async destroyAPIInvervals() {
         logger.info("Destroying Winboat API intervals...");
         if (this.#healthInterval) {
             clearInterval(this.#healthInterval);
@@ -302,8 +326,21 @@ export class Winboat {
             this.rdpConnected.value = false;
         }
 
-        if (this.qmpMgr?.isAlive) {
-            this.qmpMgr.qmpSocket.destroy();
+        if (this.#qmpInterval) {
+            clearInterval(this.#qmpInterval);
+            this.#qmpInterval = null;
+
+            // Side effect: We must destroy the QMP Manager
+            try {
+                if (this.qmpMgr && await this.qmpMgr.isAlive()) {
+                    this.qmpMgr.qmpSocket.destroy();
+                }
+                this.qmpMgr = null;
+                logger.info("[destroyAPIInvervals] QMP Manager destroyed because container is no longer running");
+            } catch(e) {
+                logger.error("[destroyAPIInvervals] Failed to destroy QMP Manager");
+                logger.error(e);
+            }
         }
     }
 
@@ -354,12 +391,7 @@ export class Winboat {
     }
 
     async #connectQMPManager() {
-        if(await this.qmpMgr?.isAlive()) {
-            return;
-        }
-
         try {
-            this.qmpMgr?.qmpSocket.destroy();
             this.qmpMgr = await QMPManager.createConnection("127.0.0.1", QMP_PORT).catch(e => {logger.error(e); throw e});
             const capabilities = await this.qmpMgr.executeCommand("qmp_capabilities");
             assert("return" in capabilities);
@@ -372,7 +404,6 @@ export class Winboat {
             logger.error("There was an error connecting to QMP");
             logger.error(e);
         }
-
     }
 
     async startContainer() {
@@ -471,7 +502,7 @@ export class Winboat {
 
         // 5. Deploy the container with the new compose file
         await execAsync(`docker compose -f ${composeFilePath} up -d`);
-        await this.#connectQMPManager();
+
         logger.info("Replace compose config completed, successfully deployed new container");
 
         this.containerActionLoading.value = false;
